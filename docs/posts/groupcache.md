@@ -54,11 +54,103 @@ tags:
 
 ![hash2.png](https://i.loli.net/2021/01/27/HqNwIJ2Dsm6tMBc.png)
 
-给定任意的 `key`，使用**相同**的哈希函数进行哈希后，`key` 也会落在圆环的位置上，我们规定沿顺时针方向遇到的第一个 `peer` 即为该 `key` 存储的位置即可，如下图：
+给定任意的 `key`，使用**相同**的哈希函数进行哈希后，`key` 也会落在圆环的位置上，我们规定沿顺时针方向遇到的第一个 `peer` 即为该 `key` 存储的位置，如下图：
 
 ![hash3.png](https://i.loli.net/2021/01/27/lZfzcF7hEdBqQOY.png)
 
-当 `peer` 的数量较少时，`peer` 的位置很容易分散不够均匀，这会造成数据倾斜，导致大部分的数据存储到了小部分的 `peer` 中。对此，我们可以为每个 `peer` 生成多个虚拟节点，分别计算哈希，所有落在虚拟节点上的值都会定位到实际的 `peer` 中。实践中，通常会将虚拟节点数设置为 32 或更大，保证即使是很少的服务节点也可以做到均匀的数据分布。
+这样，对于任意 `key`，只需要求出其哈希值，然后使用二分查找即可快速确定存储位置。
+
+当 `peer` 的数量较少时，`peer` 的位置很容易分散不够均匀，这会造成数据倾斜，即大部分的数据存储到了小部分的 `peer` 中。对此，我们可以为每个 `peer` 生成多个虚拟节点，分别计算哈希，所有落在虚拟节点上的值都会定位到实际的 `peer` 中。实践中，通常会将虚拟节点数设置为 32 或更大，保证即使是很少的服务节点也可以做到均匀的数据分布。
+
+理论完了，来看代码。
+
+```go
+type Hash func(data []byte) uint64
+```
+
+⬆️ 定义 Hash 类型。这样可以允许使用者根据需要定制哈希函数。
+
+
+
+```go
+type Map struct {
+	hash     Hash
+	replicas int
+	keys     []int // Sorted
+	hashMap  map[int]string
+}
+```
+
+⬆️ 定义一致性哈希的数据结构。`replicas`  是虚拟节点的数量，`keys` 数组存放所有的虚拟节点的哈希值，逻辑中会保证这个数组是排序过的，这也就是 “环”，最后 `hashMap` 的键是虚拟节点的哈希值，值是 `peer` 的唯一字符串，此字段用于查找 `keys` 中的哈希对应的节点。
+
+
+
+```go
+func New(replicas int, fn Hash) *Map {
+	m := &Map{
+		replicas: replicas,
+		hash:     fn,
+		hashMap:  make(map[int]string),
+	}
+	if m.hash == nil {
+		m.hash = fnv1.HashBytes64
+	}
+	return m
+}
+```
+
+⬆️ 创建 `Map` 结构
+
+
+
+```go
+func (m *Map) IsEmpty() bool {
+	return len(m.keys) == 0
+}
+```
+
+⬆️ 判断环是否为空
+
+
+
+```go
+func (m *Map) Add(keys ...string) {
+	for _, key := range keys {
+		for i := 0; i < m.replicas; i++ {
+			hash := int(m.hash([]byte(fmt.Sprintf("%x", md5.Sum([]byte(strconv.Itoa(i)+key))))))
+			m.keys = append(m.keys, hash)
+			m.hashMap[hash] = key
+		}
+	}
+	sort.Ints(m.keys)
+}
+```
+
+⬆️ `Add` 函数可以实现将多个 `peer` 添加到环中，注意最后需要将 `keys` 排序。
+
+
+
+```go
+func (m *Map) Get(key string) string {
+	if m.IsEmpty() {
+		return ""
+	}
+
+	hash := int(m.hash([]byte(key)))
+
+	// Binary search for appropriate replica.
+	idx := sort.Search(len(m.keys), func(i int) bool { return m.keys[i] >= hash })
+
+	// Means we have cycled back to the first replica.
+	if idx == len(m.keys) {
+		idx = 0
+	}
+
+	return m.hashMap[m.keys[idx]]
+}
+```
+
+⬆️ 对于任意给定的 `key`，获取距离最近的 `peer`。注意代码是怎样使用二分法快速查找以及怎样处理“环”的头尾相接的。
 
 
 
