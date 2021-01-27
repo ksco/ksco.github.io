@@ -46,5 +46,23 @@ tags:
 
 ### 一致性哈希算法
 
-我们需要快速地确认某个 `key` 的所属 `peer`，这时候就需要用到一致性哈希算法。该算法将整个哈希值空间（int）组织成一个圆环，在 64 位的机器上，这个空间的大小为。
+我们需要快速地确认某个 `key` 的所属 `peer`，这时候就需要用到一致性哈希算法。该算法将整个哈希值空间组织成一个圆环，假设这个空间的类型为 `uint32`，则空间的范围是 0～2^32-1，如下图：
 
+![hash1.png](https://i.loli.net/2021/01/27/N5zZ3GDClg7h2oc.png)
+
+假设我们现在有一个哈希函数 `string -> uint32`，使用 `peer` 的 IP 或主机名等可以唯一确定一个 `peer` 的字符串，对集群中每个 `peer` 进行哈希。假设我们有四台节点，哈希后每台节点就落在了圆环的不同位置上，如下图：
+
+![hash2.png](https://i.loli.net/2021/01/27/HqNwIJ2Dsm6tMBc.png)
+
+给定任意的 `key`，使用**相同**的哈希函数进行哈希后，`key` 也会落在圆环的位置上，我们规定沿顺时针方向遇到的第一个 `peer` 即为该 `key` 存储的位置即可，如下图：
+
+![hash3.png](https://i.loli.net/2021/01/27/lZfzcF7hEdBqQOY.png)
+
+当 `peer` 的数量较少时，`peer` 的位置很容易分散不够均匀，这会造成数据倾斜，导致大部分的数据存储到了小部分的 `peer` 中。对此，我们可以为每个 `peer` 生成多个虚拟节点，分别计算哈希，所有落在虚拟节点上的值都会定位到实际的 `peer` 中。实践中，通常会将虚拟节点数设置为 32 或更大，保证即使是很少的服务节点也可以做到均匀的数据分布。
+
+
+
+### 参考资料
+
+1. 《Consistent hashing and random trees: distributed caching protocols for relieving hot spots on the World Wide Web》https://dl.acm.org/doi/10.1145/258533.258660
+2. https://www.cnblogs.com/lpfuture/p/5796398.html 文中部分图片引用自此文
