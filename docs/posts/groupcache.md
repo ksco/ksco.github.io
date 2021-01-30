@@ -10,11 +10,11 @@ tags:
 
 # groupcache 源码阅读
 
-> 长文预警，本文会逐行解析 `groupcache` 代码的完整细节，需要花费一定的时间才能读完。
+> 长文预警，本文会逐行解析 `groupcache` 代码的完整细节，需要花费一定的时间才能读完全文。
 
 最近闲来无事，就想找个不大不小的开源项目读一读。一番选择困难后，最后选定了 `groupcache`。
 
-这个库是由 Brad Fitzpatrick 于 2013 年开发，并用于 Google 生产环境（dl.google.com）。`groupcache` 有很多精良的设计，例如它的所有权模型避免了并发程序的惊群问题，`singleflight` 设计实现了请求合并等等。`groupcache` 不仅是一份设计优良的好代码，更是被广泛使用的成熟系统。而它的代码行数不过 2000 余行，用来阅读再合适不过了。
+这个库是由 Brad Fitzpatrick 于 2013 年开发，并用于 Google 生产环境（dl.google.com）。`groupcache` 有很多精良的设计，例如它的所有权模型避免了并发程序的惊群问题，`singleflight` 设计实现了请求合并等等。`groupcache` 不仅是一份设计优良的好代码，更是一个被广泛使用的成熟系统。而它的代码行数不过 2000 余行，用来阅读再合适不过了。
 
 因为原项目已经很久没更新，在这期间 Go 语言也发生了一些变化，所以这次源码阅读我选用了一个社区维护的版本：https://github.com/mailgun/groupcache。
 
@@ -30,7 +30,7 @@ tags:
 
 1. 因为 `"foo"` 是热点数据，所以在本机内存中？返回该值。
 
-2. 因为 `"foo"` 的所属者是 #5（当前 `peer`），所以在本机内存中？返回该值。
+2. 因为 `"foo"` 的所属者是 #5（当前 `peer`），所以数据在本机内存中？返回该值。
 
 3. 在所有的 N 个 `peer` 中，`"foo"` 的所属者应该是我吗（通过一致性哈希算法确认）？如果是的话，说明当前 `key` 并没有被加载到缓存中，那就从数据源加载它。
 
@@ -62,7 +62,7 @@ tags:
 
 当 `peer` 的数量较少时，`peer` 的位置很容易分散不够均匀，这会造成数据倾斜，即大部分的数据存储到了小部分的 `peer` 中。对此，我们可以为每个 `peer` 生成多个虚拟节点，分别计算哈希，所有落在虚拟节点上的值都会定位到实际的 `peer` 中。实践中，通常会将虚拟节点数设置为 32 或更大，保证即使是很少的服务节点也可以做到均匀的数据分布。
 
-理论完了，来看代码。
+理论完了，来看[代码](https://github.com/mailgun/groupcache/blob/master/consistenthash/consistenthash.go)。
 
 ```go
 type Hash func(data []byte) uint64
@@ -170,7 +170,186 @@ func (m *Map) Get(key string) string {
 
 3. REMOVE 操作。如果 key 在哈希表中存在，将其从哈希表和双向链表中删除即可。
 
+来看[代码](https://github.com/mailgun/groupcache/blob/master/lru/lru.go)。
 
+```go
+// A Key may be any value that is comparable. See http://golang.org/ref/spec#Comparison_operators
+type Key interface{}
+
+type entry struct {
+	key    Key
+	value  interface{}
+	expire time.Time
+}
+```
+
+⬆️ 定义 Cache 中的元素类型。`expire` 记录 `key` 的过期时间，已过期的 `key` 会在 `Get` 时被动删除。
+
+
+
+```go
+// Cache is an LRU cache. It is not safe for concurrent access.
+type Cache struct {
+	// MaxEntries is the maximum number of cache entries before
+	// an item is evicted. Zero means no limit.
+	MaxEntries int
+
+	// OnEvicted optionally specifies a callback function to be
+	// executed when an entry is purged from the cache.
+	OnEvicted func(key Key, value interface{})
+
+	ll    *list.List
+	cache map[interface{}]*list.Element
+}
+```
+
+⬆️ 定义 Cache 结构。`ll` 是双向链表，使用的是标准库提供的实现；cache 是哈希表。`OnEvicted` 不为空时，每当 `entry` 被移出缓存时，就会调用该函数。注意此实现并没有考虑线程安全，即不能在多个 goroutine 中使用同一个 Cache 实例。
+
+
+
+```go
+// New creates a new Cache.
+// If maxEntries is zero, the cache has no limit and it's assumed
+// that eviction is done by the caller.
+func New(maxEntries int) *Cache {
+	return &Cache{
+		MaxEntries: maxEntries,
+		ll:         list.New(),
+		cache:      make(map[interface{}]*list.Element),
+	}
+}
+```
+
+⬆️ 创建 Cache。
+
+
+
+```go
+func (c *Cache) removeElement(e *list.Element) {
+	c.ll.Remove(e)
+	kv := e.Value.(*entry)
+	delete(c.cache, kv.key)
+	if c.OnEvicted != nil {
+		c.OnEvicted(kv.key, kv.value)
+	}
+}
+```
+
+⬆️ 将某个元素移出 Cache，注意该函数中对于 `OnEvicted` 的调用。
+
+
+
+```go
+// Add adds a value to the cache.
+func (c *Cache) Add(key Key, value interface{}, expire time.Time) {
+	if c.cache == nil {
+		c.cache = make(map[interface{}]*list.Element)
+		c.ll = list.New()
+	}
+	if ee, ok := c.cache[key]; ok {
+		c.ll.MoveToFront(ee)
+		ee.Value.(*entry).value = value
+		return
+	}
+	ele := c.ll.PushFront(&entry{key, value, expire})
+	c.cache[key] = ele
+	if c.MaxEntries != 0 && c.ll.Len() > c.MaxEntries {
+		c.RemoveOldest()
+	}
+}
+```
+
+⬆️ 将某个值加到内存中。分了两种情况：更新已有 `key` 和插入新 `key`
+
+
+
+```go
+// Get looks up a key's value from the cache.
+func (c *Cache) Get(key Key) (value interface{}, ok bool) {
+	if c.cache == nil {
+		return
+	}
+	if ele, hit := c.cache[key]; hit {
+		entry := ele.Value.(*entry)
+		// If the entry has expired, remove it from the cache
+		if !entry.expire.IsZero() && entry.expire.Before(time.Now()) {
+			c.removeElement(ele)
+			return nil, false
+		}
+
+		c.ll.MoveToFront(ele)
+		return entry.value, true
+	}
+	return
+}
+```
+
+⬆️ 查询缓存中对应 `key` 的值，注意对于过期 `entry` 的处理。
+
+
+
+```go
+// Remove removes the provided key from the cache.
+func (c *Cache) Remove(key Key) {
+	if c.cache == nil {
+		return
+	}
+	if ele, hit := c.cache[key]; hit {
+		c.removeElement(ele)
+	}
+}
+```
+
+⬆️ 将 `key` 从缓存中移除。
+
+
+
+```go
+// RemoveOldest removes the oldest item from the cache.
+func (c *Cache) RemoveOldest() {
+	if c.cache == nil {
+		return
+	}
+	ele := c.ll.Back()
+	if ele != nil {
+		c.removeElement(ele)
+	}
+}
+```
+
+⬆️ 将最久未使用的 `key` 从缓存中移除。
+
+
+
+```go
+// Len returns the number of items in the cache.
+func (c *Cache) Len() int {
+	if c.cache == nil {
+		return 0
+	}
+	return c.ll.Len()
+}
+```
+
+⬆️ 获取缓存中 `key` 的个数。
+
+
+
+```go
+// Clear purges all stored items from the cache.
+func (c *Cache) Clear() {
+	if c.OnEvicted != nil {
+		for _, e := range c.cache {
+			kv := e.Value.(*entry)
+			c.OnEvicted(kv.key, kv.value)
+		}
+	}
+	c.ll = nil
+	c.cache = nil
+}
+```
+
+⬆️ 清除缓存。
 
 
 
