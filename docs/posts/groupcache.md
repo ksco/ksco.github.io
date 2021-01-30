@@ -68,7 +68,9 @@ tags:
 type Hash func(data []byte) uint64
 ```
 
-⬆️ 定义 Hash 类型。这样可以允许使用者根据需要定制哈希函数。
+> 定义 Hash 类型。这样可以允许使用者根据需要定制哈希函数。
+
+
 
 
 
@@ -81,7 +83,9 @@ type Map struct {
 }
 ```
 
-⬆️ 定义一致性哈希的数据结构。`replicas`  是虚拟节点的数量，`keys` 数组存放所有的虚拟节点的哈希值，逻辑中会保证这个数组是排序过的，这也就是 “环”，最后 `hashMap` 的键是虚拟节点的哈希值，值是 `peer` 的唯一字符串，此字段用于查找 `keys` 中的哈希对应的节点。
+> 定义一致性哈希的数据结构。`replicas`  是虚拟节点的数量，`keys` 数组存放所有的虚拟节点的哈希值，逻辑中会保证这个数组是排序过的，这也就是 “环”，最后 `hashMap` 的键是虚拟节点的哈希值，值是 `peer` 的唯一字符串，此字段用于查找 `keys` 中的哈希对应的节点。
+
+
 
 
 
@@ -99,7 +103,9 @@ func New(replicas int, fn Hash) *Map {
 }
 ```
 
-⬆️ 创建 `Map` 结构
+> 创建 `Map` 结构
+
+
 
 
 
@@ -109,7 +115,9 @@ func (m *Map) IsEmpty() bool {
 }
 ```
 
-⬆️ 判断环是否为空
+> 判断环是否为空
+
+
 
 
 
@@ -126,7 +134,9 @@ func (m *Map) Add(keys ...string) {
 }
 ```
 
-⬆️ `Add` 函数可以实现将多个 `peer` 添加到环中，注意最后需要将 `keys` 排序。
+> `Add` 函数可以实现将多个 `peer` 添加到环中，注意最后需要将 `keys` 排序。
+
+
 
 
 
@@ -150,13 +160,15 @@ func (m *Map) Get(key string) string {
 }
 ```
 
-⬆️ 对于任意给定的 `key`，获取距离最近的 `peer`。注意代码是怎样使用二分法快速查找以及怎样处理“环”的头尾相接的。
+> 对于任意给定的 `key`，获取距离最近的 `peer`。注意代码是怎样使用二分法快速查找以及怎样处理“环”的头尾相接的。
+
+
 
 
 
 ### 最近最少使用算法（LRU）
 
-`groupcache` 使用 LRU 作为缓存的置换算法。缓存区的大小是有限的，当缓存区塞满之后，势必要淘汰一些旧数据来为新数据腾出坑位。LRU 说：**那就淘汰掉最久没有用过的那些数据吧！**这便是 LRU 的核心思想了。
+`groupcache` 使用 LRU 作为缓存的置换算法。缓存区的大小是有限的，当缓存区塞满之后，势必要淘汰一些旧数据来为新数据腾出坑位。LRU 说： **那就淘汰掉最久没有用过的那些数据吧！** 这便是 LRU 的核心思想了。
 
 因为我们需要淘汰掉最久未使用的数据，所以需要一个有序的数据结构来记录数据被使用的时间顺序。另外我们要实现的是一个缓存系统，所以插入和删除的时间复杂度都要求是 O(1)，符合这个条件的也就是双向链表了。
 
@@ -183,7 +195,9 @@ type entry struct {
 }
 ```
 
-⬆️ 定义 Cache 中的元素类型。`expire` 记录 `key` 的过期时间，已过期的 `key` 会在 `Get` 时被动删除。
+> 定义 Cache 中的元素类型。`expire` 记录 `key` 的过期时间，已过期的 `key` 会在 `Get` 时被动删除。
+
+
 
 
 
@@ -203,7 +217,9 @@ type Cache struct {
 }
 ```
 
-⬆️ 定义 Cache 结构。`ll` 是双向链表，使用的是标准库提供的实现；cache 是哈希表。`OnEvicted` 不为空时，每当 `entry` 被移出缓存时，就会调用该函数。注意此实现并没有考虑线程安全，即不能在多个 goroutine 中使用同一个 Cache 实例。
+> 定义 Cache 结构。`ll` 是双向链表，使用的是标准库提供的实现；cache 是哈希表。`OnEvicted` 不为空时，每当 `entry` 被移出缓存时，就会调用该函数。注意此实现并没有考虑线程安全，即不能在多个 goroutine 中使用同一个 Cache 实例。
+
+
 
 
 
@@ -220,7 +236,7 @@ func New(maxEntries int) *Cache {
 }
 ```
 
-⬆️ 创建 Cache。
+> 创建 Cache。
 
 
 
@@ -235,7 +251,7 @@ func (c *Cache) removeElement(e *list.Element) {
 }
 ```
 
-⬆️ 将某个元素移出 Cache，注意该函数中对于 `OnEvicted` 的调用。
+> 将某个元素移出 Cache，注意该函数中对于 `OnEvicted` 的调用。
 
 
 
@@ -259,7 +275,7 @@ func (c *Cache) Add(key Key, value interface{}, expire time.Time) {
 }
 ```
 
-⬆️ 将某个值加到内存中。分了两种情况：更新已有 `key` 和插入新 `key`
+> 将某个值加到内存中。分了两种情况：更新已有 `key` 和插入新 `key`
 
 
 
@@ -284,7 +300,7 @@ func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 }
 ```
 
-⬆️ 查询缓存中对应 `key` 的值，注意对于过期 `entry` 的处理。
+> 查询缓存中对应 `key` 的值，注意对于过期 `entry` 的处理。
 
 
 
@@ -300,7 +316,7 @@ func (c *Cache) Remove(key Key) {
 }
 ```
 
-⬆️ 将 `key` 从缓存中移除。
+> 将 `key` 从缓存中移除。
 
 
 
@@ -317,7 +333,7 @@ func (c *Cache) RemoveOldest() {
 }
 ```
 
-⬆️ 将最久未使用的 `key` 从缓存中移除。
+> 将最久未使用的 `key` 从缓存中移除。
 
 
 
@@ -331,7 +347,7 @@ func (c *Cache) Len() int {
 }
 ```
 
-⬆️ 获取缓存中 `key` 的个数。
+> 获取缓存中 `key` 的个数。
 
 
 
@@ -349,13 +365,13 @@ func (c *Cache) Clear() {
 }
 ```
 
-⬆️ 清除缓存。
+> 清除缓存。
 
 
 
 ### SingleFlight
 
-如果你曾经参与过高并发的缓存系统的开发，那你大概率会知道**缓存击穿**问题。假设系统使用 Redis 作为缓存中间件。当一个热点数据被高并发的请求时，如果此时 Redis 中对于该数据的缓存已经过期，这些并发的请求就会同时打到下游的数据库中，造成缓存系统的失效，如下图<sup>[3]</sup>：
+在高并发的缓存系统中，**缓存击穿** 是一个常见问题。假设系统使用 Redis 作为缓存中间件。当一个热点数据被并发请求时，如果此时 Redis 中对于该数据的缓存已经过期，这些并发的请求就会同时打到下游的数据库中，造成缓存系统的失效，如下图<sup>[3]</sup>：
 
 ![2020-01-23-15797104328070-golang-query-without-single-flight.png](https://i.loli.net/2021/01/30/EKuk9hOCQc1U3Wj.png)
 
@@ -363,17 +379,152 @@ func (c *Cache) Clear() {
 
 SingleFlight 可以有效地抑制客户端对同一个键值对的并发请求，减少对于下游数据库的瞬时流量，如下图<sup>[3]</sup>：
 
-![2020-01-23-15797104328078-golang-extension-single-flight](/Users/ksco/Downloads/2020-01-23-15797104328078-golang-extension-single-flight.png)
+![2020-01-23-15797104328078-golang-extension-single-flight.png](https://i.loli.net/2021/01/30/L6SlQ4sIKTu9Yto.png)
 
 
 
-Go 语言的标准库中也提供了 singleflight 的实现，但 groupcache 并没有使用，而是选择自己实现。因为作者在编写 groupcache 时，Go 语言的标准库中还没有提供该实现。我们本次代码阅读也以作者自己的实现为准。
+Go 语言的标准库中也提供了 [singleflight](https://github.com/golang/sync/blob/master/singleflight/singleflight.go) 的实现，但 groupcache 并没有使用，而是选择[自己实现](https://github.com/mailgun/groupcache/blob/master/singleflight/singleflight.go)。因为作者在编写 groupcache 时，Go 语言的标准库中还没有提供该实现。我们本次代码阅读也以作者自己的实现为准。
 
-如果对于某个 `key` 的请求已经存在且正在进行中，则对于该 key 的新请求就会被堵塞，直到请求完成后，所有被堵塞的请求也将获得请求的结果，并结束堵塞。我们来看一下具体的实现细节。
+如果对于某个 `key` 的请求已经存在且正在进行中，则对于该 key 的新请求就会被堵塞，直到请求完成后，所有被堵塞的请求也将获得请求的结果，并结束堵塞。
+
+我们来看一下[代码](https://github.com/mailgun/groupcache/blob/master/singleflight/singleflight.go)的实现细节。
+
+```go
+// call is an in-flight or completed Do call
+type call struct {
+	wg  sync.WaitGroup
+	val interface{}
+	err error
+}
+```
+
+> `call` 表示一个进行中或者已经完成的请求，其中 `wg` 用于实现新请求的堵塞机制。如果你对 `WaitGroup` 缺乏了解，可以通过[此处](https://gobyexample.com/waitgroups)快速熟悉用法，更多细节可以阅读 [GoDoc 页面](https://golang.org/pkg/sync/#WaitGroup)。
 
 
 
 
+
+```go
+// Group represents a class of work and forms a namespace in which
+// units of work can be executed with duplicate suppression.
+type Group struct {
+	mu sync.Mutex       // protects m
+	m  map[string]*call // lazily initialized
+}
+
+```
+
+> Group 通过持有一个 `map` 和保护 `map` 的锁，来实现对请求的管理。
+
+
+
+```go
+// Do executes and returns the results of the given function, making
+// sure that only one execution is in-flight for a given key at a
+// time. If a duplicate comes in, the duplicate caller waits for the
+// original to complete and receives the same results.
+func (g *Group) Do(key string, fn func() (interface{}, error)) (interface{}, error) {
+	g.mu.Lock()
+	if g.m == nil {
+		g.m = make(map[string]*call)
+	}
+	if c, ok := g.m[key]; ok {
+		g.mu.Unlock()
+		c.wg.Wait()
+		return c.val, c.err
+	}
+	c := new(call)
+	c.wg.Add(1)
+	g.m[key] = c
+	g.mu.Unlock()
+
+	c.val, c.err = fn()
+	c.wg.Done()
+
+	g.mu.Lock()
+	delete(g.m, key)
+	g.mu.Unlock()
+
+	return c.val, c.err
+}
+```
+
+> `Do` 函数接受两个参数：`key` 和获取 key 值对应的函数。`Do` 方法支持并发调用，并保证对于同一个 `key` 的并发调用，`fn` 只会执行一次，所有的并发调用都会拿到相同的返回值。下面我们来逐行解释一下这个函数的实现：
+>
+> ```go
+> g.mu.Lock()
+> ```
+>
+> 因为我们接下来要操作 `m`，所以先加锁。
+>
+> 
+>
+> ```go
+> if g.m == nil {
+> 	g.m = make(map[string]*call)
+> }
+> ```
+> 懒初始化。
+>
+> 
+>
+> ```go
+> if c, ok := g.m[key]; ok {
+> 	g.mu.Unlock()
+> 	c.wg.Wait()
+> 	return c.val, c.err
+> }
+> ```
+> 当 `key` 存在于 `m` 中时，说明当前的 `call` 正在执行中。进入到 `if` 中后，我们后续不再需要操作 `m` 了，所以先释放锁。然后调用 `wg.Wait()` 等待 `call` 执行成功。最终将执行结果返回。
+>
+> 
+>
+> ```go
+> c := new(call)
+> c.wg.Add(1)
+> g.m[key] = c
+> g.mu.Unlock()
+> ```
+>
+> 如果 `key` 不存在于 `m` 中，说明当前请求并没有在执行，我们创建一个新请求，并调用 `wg.Add(1)` 将请求的引用数 +1，这样其他并发的 `Do` 调用就会在 `if` 中堵塞在 `wg.Wait()` 语句处，直到我们释放该引用为止。
+>
+> 然后设置 `m[key]`，因为后续的代码中不再需要操作 `m`，设置完后释放锁。
+>
+> 
+>
+> ```go
+> 	c.val, c.err = fn()
+> 	c.wg.Done()
+> ```
+>
+> 执行 `fn`，执行完成后，调用 `wg.Done()` 释放引用，此时其他的并发 `Do` 调用也会停止堵塞，并获得 `call` 中的执行结果。
+>
+> 
+>
+> ```go
+> 	g.mu.Lock()
+> 	delete(g.m, key)
+> 	g.mu.Unlock()
+> 
+> 	return c.val, c.err
+> ```
+>
+> 最后我们将 `m[key]` 删除，并将执行结果返回。
+
+
+
+```go
+// Lock prevents single flights from occurring for the duration
+// of the provided function. This allows users to clear caches
+// or preform some operation in between running flights.
+func (g *Group) Lock(fn func()) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	fn()
+}
+```
+
+> `Lock` 方法会执行 `fn`函数，并通过在执行期间持有锁，保证这段时间不会有任何新的请求被触发。可以使用该方法安全地清除所有的缓存，或者在两次 SingleFlight 中间执行一些操作。
 
 
 
