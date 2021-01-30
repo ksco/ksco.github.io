@@ -46,15 +46,15 @@ tags:
 
 ### 一致性哈希算法
 
-我们需要快速地确认某个 `key` 的所属 `peer`，这时候就需要用到一致性哈希算法。该算法将整个哈希值空间组织成一个圆环，假设这个空间的类型为 `uint32`，则空间的范围是 0～2^32-1，如下图：
+我们需要快速地确认某个 `key` 的所属 `peer`，这时候就需要用到一致性哈希算法<sup>[1]</sup>。该算法将整个哈希值空间组织成一个圆环，假设这个空间的类型为 `uint32`，则空间的范围是 0～2^32-1，如下图<sup>[2]</sup>：
 
 ![hash1.png](https://i.loli.net/2021/01/27/N5zZ3GDClg7h2oc.png)
 
-假设我们现在有一个哈希函数 `string -> uint32`，使用 `peer` 的 IP 或主机名等可以唯一确定一个 `peer` 的字符串，对集群中每个 `peer` 进行哈希。假设我们有四台节点，哈希后每台节点就落在了圆环的不同位置上，如下图：
+假设我们现在有一个哈希函数 `string -> uint32`，使用 `peer` 的 IP 或主机名等可以唯一确定一个 `peer` 的字符串，对集群中每个 `peer` 进行哈希。假设我们有四台节点，哈希后每台节点就落在了圆环的不同位置上，如下图<sup>[2]</sup>：
 
 ![hash2.png](https://i.loli.net/2021/01/27/HqNwIJ2Dsm6tMBc.png)
 
-给定任意的 `key`，使用**相同**的哈希函数进行哈希后，`key` 也会落在圆环的位置上，我们规定沿顺时针方向遇到的第一个 `peer` 即为该 `key` 存储的位置，如下图：
+给定任意的 `key`，使用**相同**的哈希函数进行哈希后，`key` 也会落在圆环的位置上，我们规定沿顺时针方向遇到的第一个 `peer` 即为该 `key` 存储的位置，如下图<sup>[2]</sup>：
 
 ![hash3.png](https://i.loli.net/2021/01/27/lZfzcF7hEdBqQOY.png)
 
@@ -353,7 +353,33 @@ func (c *Cache) Clear() {
 
 
 
+### SingleFlight
+
+如果你曾经参与过高并发的缓存系统的开发，那你大概率会知道**缓存击穿**问题。假设系统使用 Redis 作为缓存中间件。当一个热点数据被高并发的请求时，如果此时 Redis 中对于该数据的缓存已经过期，这些并发的请求就会同时打到下游的数据库中，造成缓存系统的失效，如下图<sup>[3]</sup>：
+
+![2020-01-23-15797104328070-golang-query-without-single-flight.png](https://i.loli.net/2021/01/30/EKuk9hOCQc1U3Wj.png)
+
+
+
+SingleFlight 可以有效地抑制客户端对同一个键值对的并发请求，减少对于下游数据库的瞬时流量，如下图<sup>[3]</sup>：
+
+![2020-01-23-15797104328078-golang-extension-single-flight](/Users/ksco/Downloads/2020-01-23-15797104328078-golang-extension-single-flight.png)
+
+
+
+Go 语言的标准库中也提供了 singleflight 的实现，但 groupcache 并没有使用，而是选择自己实现。因为作者在编写 groupcache 时，Go 语言的标准库中还没有提供该实现。我们本次代码阅读也以作者自己的实现为准。
+
+如果对于某个 `key` 的请求已经存在且正在进行中，则对于该 key 的新请求就会被堵塞，直到请求完成后，所有被堵塞的请求也将获得请求的结果，并结束堵塞。我们来看一下具体的实现细节。
+
+
+
+
+
+
+
 ### 参考资料
 
 1. 《Consistent hashing and random trees: distributed caching protocols for relieving hot spots on the World Wide Web》https://dl.acm.org/doi/10.1145/258533.258660
-2. https://www.cnblogs.com/lpfuture/p/5796398.html 文中部分图片引用自此文
+2. https://www.cnblogs.com/lpfuture/p/5796398.html 文中部分图片和文字描述引用自此文。
+3. https://draveness.me/golang/docs/part3-runtime/ch06-concurrency/golang-sync-primitives/#singleflight 文中部分图片和文字描述引用自此文。
+
