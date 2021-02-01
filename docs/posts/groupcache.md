@@ -44,6 +44,10 @@ tags:
 
 
 
+## 基础设施
+
+
+
 ### 一致性哈希算法
 
 我们需要快速地确认某个 `key` 的所属 `peer`，这时候就需要用到一致性哈希算法<sup>[1]</sup>。该算法将整个哈希值空间组织成一个圆环，假设这个空间的类型为 `uint32`，则空间的范围是 0～2^32-1，如下图<sup>[2]</sup>：
@@ -525,6 +529,28 @@ func (g *Group) Lock(fn func()) {
 ```
 
 > `Lock` 方法会执行 `fn`函数，并通过在执行期间持有锁，保证这段时间不会有任何新的请求被触发。可以使用该方法安全地清除所有的缓存，或者在两次 SingleFlight 中间执行一些操作。
+
+
+
+### ByteView
+
+[ByteView](https://github.com/mailgun/groupcache/blob/master/byteview.go) 隐藏了 string 和 []byte 转换的细节，封装了一个结构体和与之绑定的一系列方法来表示和操作文本数据。代码直观易懂，这里就不再浪费读者的时间了，建议直接读一下[源代码](https://github.com/mailgun/groupcache/blob/master/byteview.go)。
+
+
+
+### Protobuf
+
+Protocol Buffers 是谷歌公司出品的消息序列化与反序列化协议，并提供了常见编程语言的 Code Generator。groupcache 使用了该协议，在 [groupcache.proto](https://github.com/mailgun/groupcache/blob/master/groupcachepb/groupcache.proto) 中定义。了解该协议可以参考其[官方网站](https://developers.google.com/protocol-buffers)，此处不在赘述。
+
+
+
+到这里，groupcache 的基础设施已经介绍完毕了，来看一下核心代码。
+
+
+
+## 核心逻辑
+
+// TODO
 
 
 
